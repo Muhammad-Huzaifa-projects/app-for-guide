@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Voice AI</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #0f2027;
+    background: linear-gradient(to right, #203a43, #2c5364);
+    color: white;
+    text-align: center;
+    padding: 50px;
+}
+
+button {
+    padding: 15px 30px;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin: 10px;
+}
+
+#startBtn {
+    background-color: #4CAF50; /* Green */
+    color: white;
+}
+
+#stopBtn {
+    background-color: #888888; /* Grey */
+    color: white;
+}
+
+#text {
+    margin-top: 30px;
+    font-size: 22px;
+}
+
+.status-dot {
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 10px;
+    vertical-align: middle;
+    background-color: #555; /* default idle */
+}
+
+.status-listening {
+    background-color: #4CAF50; /* Green */
+}
+
+.status-speaking {
+    background-color: #2196F3; /* Blue */
+}
+
+footer {
+    margin-top: 50px;
+    opacity: 0.7;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🎤 Interactive Voice AI</h1>
+<p>Click Start and speak anytime 
+    <span id="statusDot" class="status-dot"></span>
+</p>
+
+<button id="startBtn">Start Listening</button>
+<button id="stopBtn">Stop Listening</button>
+
+<div id="text"></div>
+
+<footer>Developed by Muhammad Huzaifa</footer>
+
+<script>
+let recognition;
+let listening = false;
+const statusDot = document.getElementById("statusDot");
+
+// --- Conversation data (original + greetings/thank you/ok) ---
+const conversationData = [
+    // Introductions
+    { user: "Hi, I’m etc. Nice to meet you", ai: "Hey! I’m your guidance system. Pleasure to meet you too. How can I help? What do you do?", askFollowUp: true },
+    { user: "Hello! I’m Ali, from Pakistan", ai: "Hi Ali! I’m Maya. How’s your day going?", askFollowUp: true },
+
+    // Passion & Interests
+    { user: "I’m really into photography", ai: "Oh wow! What kind of photography do you like?", askFollowUp: true },
+    { user: "I love coding and building apps", ai: "That’s cool! Do you focus on mobile apps, websites, or both?", askFollowUp: true },
+
+    // Hobbies & Free-Time
+    { user: "On weekends, I love hiking", ai: "That’s awesome! Do you have a favorite trail?", askFollowUp: true },
+    { user: "I spend a lot of my free time reading novels", ai: "Nice! What genre do you enjoy the most?", askFollowUp: true },
+
+    // Casual dialogues
+    { user: "Hey, how’s it going", ai: "Hey! I’m good, just sipping some coffee. You?", askFollowUp: true },
+    { user: "I’m thinking of learning a new language", ai: "That’s exciting! Which one?", askFollowUp: true },
+    { user: "I feel like I need a new hobby", ai: "Maybe we can brainstorm! Do you prefer indoor or outdoor activities?", askFollowUp: true },
+
+    // Hospital-related / guidance system questions
+    { user: "Who develop you", ai: "I was developed by Muhammad Huzaifa.", askFollowUp: false },
+    { user: "Purpose of you", ai: "I am a voice guidance system to help people and it's for hospital visitors, patients, attendants. I guide step by step.", askFollowUp: false },
+    { user: "How you help", ai: "I provide guidance like where to start, where to go, and step by step procedures. I do not provide medical advice.", askFollowUp: false },
+    { user: "Where to start", ai: "I can guide you on where to start based on your requirement.", askFollowUp: false },
+    { user: "Where to go", ai: "I can direct you to the right place, step by step.", askFollowUp: false },
+
+    // Basic greetings
+    { user: "hi", ai: "Hello! How are you?", askFollowUp: true },
+    { user: "hello", ai: "Hi there! How’s it going?", askFollowUp: true },
+    { user: "how are you", ai: "I’m doing great! How about you?", askFollowUp: true },
+
+    // Thank you / Ok responses
+    { user: "thank you", ai: "You’re welcome!", askFollowUp: false },
+    { user: "ok", ai: "Ok!", askFollowUp: false }
+];
+
+// --- Utility: simple similarity score ---
+function similarityScore(input, target) {
+    const inputWords = input.toLowerCase().split(/\W+/);
+    const targetWords = target.toLowerCase().split(/\W+/);
+    let matches = 0;
+    inputWords.forEach(word => {
+        if (targetWords.includes(word)) matches++;
+    });
+    return matches / targetWords.length;
+}
+
+// --- Find best conversation match ---
+function findConversationResponse(userText) {
+    let bestScore = 0;
+    let bestResponse = null;
+
+    conversationData.forEach(item => {
+        const score = similarityScore(userText, item.user);
+        if (score > bestScore) {
+            bestScore = score;
+            bestResponse = item;
+        }
+    });
+
+    if (bestScore < 0.2) {
+        return "Sorry, this project is in initial stage right now and still work in progress.";
+    } else {
+        if (bestResponse.askFollowUp && Math.random() > 0.3) {
+            return bestResponse.ai;
+        } else {
+            return bestResponse.ai.replace(/\?.*$/, ".");
+        }
+    }
+}
+
+// --- Initialize recognition ---
+function initRecognition() {
+    if (!('webkitSpeechRecognition' in window)) {
+        alert("Speech Recognition not supported");
+        return;
+    }
+
+    recognition = new webkitSpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+        statusDot.className = "status-dot status-listening"; // green dot
+    };
+
+    recognition.onresult = function(event) {
+        const userSpeech = event.results[0][0].transcript;
+        document.getElementById("text").innerText = "You said: " + userSpeech;
+        const response = findConversationResponse(userSpeech);
+        speak(response);
+    };
+
+    recognition.onerror = function(event) {
+        document.getElementById("text").innerText = "Error: " + event.error;
+        statusDot.className = "status-dot"; // reset
+    };
+
+    recognition.onend = function() {
+        if (listening) recognition.start(); // continuous
+        else statusDot.className = "status-dot"; // reset when stopped
+    };
+}
+
+// --- Start / Stop buttons ---
+document.getElementById("startBtn").addEventListener("click", () => {
+    if (!listening) {
+        listening = true;
+        document.getElementById("text").innerText = "Listening...";
+        initRecognition();
+        recognition.start();
+    }
+});
+
+document.getElementById("stopBtn").addEventListener("click", () => {
+    listening = false;
+    if (recognition) recognition.stop();
+    document.getElementById("text").innerText = "Stopped listening.";
+    statusDot.className = "status-dot"; // reset dot
+});
+
+// --- Speak function ---
+function speak(message) {
+    statusDot.className = "status-dot status-speaking"; // blue dot
+    const speech = new SpeechSynthesisUtterance(message);
+    speech.lang = "en-US";
+    speech.onend = () => {
+        if (listening) {
+            statusDot.className = "status-dot status-listening"; // back to green
+        } else {
+            statusDot.className = "status-dot"; // idle
+        }
+    };
+    window.speechSynthesis.speak(speech);
+}
+</script>
+
+</body>
+</html>
